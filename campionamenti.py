@@ -9,7 +9,7 @@ from datetime import date
 # ===============================
 creds = Credentials.from_service_account_info(st.secrets["google_service_account"])
 client = gspread.authorize(creds)
-SHEET_ID = "IL_TUO_ID_DEL_FOGLIO"  # sostituisci con l'ID del foglio
+SHEET_ID = "1lDwKaEz4_TyEX9qCHwbytmHBWvuUOanbBNtBTMpmytg"  # sostituisci con l'ID del foglio
 sheet = client.open_by_key(SHEET_ID).sheet1
 
 # ===============================
@@ -160,3 +160,4 @@ if st.button("💾 Salva Prelievi"):
     df_nuovo = pd.DataFrame(nuovi_prelievi)
     salva_dati(df_nuovo)
     st.success("✅ Prelievi salvati correttamente su Google Sheets!")
+
