@@ -1,4 +1,4 @@
-# campionamenti_streamlit_ottim.py
+# campionamenti_streamlit_finale.py
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -6,17 +6,6 @@ import pandas as pd
 from datetime import datetime, date
 
 st.set_page_config(layout="wide")
-
-# ===============================
-# AUTENTICAZIONE GOOGLE SHEETS (BLOCCO DA NON MODIFICARE)
-# ===============================
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-SERVICE_ACCOUNT_INFO = st.secrets["google_service_account"]
-creds = Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
-client = gspread.authorize(creds)
-
-SHEET_ID = "1KCPltH_8EtI5svqRivdwI68DWJ6eE1IK3UDe45PENf8"
-sheet = client.open_by_key(SHEET_ID).sheet1
 
 # ===============================
 # HEADER (deve corrispondere al foglio)
@@ -35,56 +24,7 @@ HEADER = [
 ]
 
 # ===============================
-# UTILITY: safe sheet operations
-# ===============================
-def safe_get_all_records():
-    try:
-        return sheet.get_all_records()
-    except Exception as e:
-        st.error(f"Errore connessione a Google Sheets: {e}")
-        return []
-
-def safe_get_all_values():
-    try:
-        return sheet.get_all_values()
-    except Exception as e:
-        st.error(f"Errore connessione a Google Sheets: {e}")
-        return []
-
-def ensure_header():
-    try:
-        row1 = sheet.row_values(1)
-        if not row1 or row1[:len(HEADER)] != HEADER[:len(row1)]:
-            # inserisce header se mancante o diverso
-            sheet.insert_row(HEADER, index=1)
-    except Exception as e:
-        st.warning(f"Impossibile assicurare header: {e}")
-
-def delete_rows_for_session(session_id):
-    """Elimina righe con SessionID = session_id (non tocca header)."""
-    try:
-        all_vals = safe_get_all_values()
-        if not all_vals or len(all_vals) <= 1:
-            return
-        rows_to_delete = []
-        for idx, row in enumerate(all_vals[1:], start=2):  # skip header
-            if len(row) >= 1 and row[0] == session_id:
-                rows_to_delete.append(idx)
-        for r in sorted(rows_to_delete, reverse=True):
-            sheet.delete_rows(r)
-    except Exception as e:
-        st.error(f"Errore eliminazione righe sessione: {e}")
-
-def append_rows(rows):
-    if not rows:
-        return
-    try:
-        sheet.append_rows(rows, value_input_option="USER_ENTERED")
-    except Exception as e:
-        st.error(f"Errore append su Google Sheets: {e}")
-
-# ===============================
-# CALCOLI
+# UTILITY
 # ===============================
 def calcola_volume_normalizzato(vol_in, vol_fin, temp_in, temp_fin, pressione_hpa):
     try:
@@ -97,20 +37,15 @@ def calcola_volume_normalizzato(vol_in, vol_fin, temp_in, temp_fin, pressione_hp
 # ===============================
 # INIT
 # ===============================
-ensure_header()
-records = safe_get_all_records()
-all_values = safe_get_all_values()
-
-# list of sessionIDs present in sheet
-session_ids = sorted(list({r["SessionID"] for r in records if r.get("SessionID")}), reverse=True)
-session_ids_display = ["➕ Nuova sessione"] + session_ids
-
-st.title("📋 Modulo Campionamenti Ambientali — Versione ottimizzata")
+st.title("📋 Modulo Campionamenti Ambientali — Versione finale ottimizzata")
 
 # ===============================
 # SESSION SELECT / CREATE
 # ===============================
+# Per le sessioni esistenti leggeremo dal foglio solo al salvataggio per evitare troppe chiamate
+session_ids_display = ["➕ Nuova sessione"]
 selected_session = st.selectbox("Seleziona SessionID o crea nuova sessione", session_ids_display)
+
 if selected_session == "➕ Nuova sessione":
     if "current_session" not in st.session_state or not st.session_state.get("current_session_is_new", False):
         st.session_state.current_session = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -123,135 +58,78 @@ SessionID = st.session_state.current_session
 st.markdown(f"**SessionID corrente:** `{SessionID}`")
 
 # ===============================
-# PREFILL: estrai righe della sessione (se esiste)
-# ===============================
-session_rows = [r for r in records if r.get("SessionID") == SessionID]
-prefill = {}
-if session_rows:
-    for r in session_rows:
-        try:
-            n = int(r.get("PrelievoN", 1))
-        except Exception:
-            n = 1
-        pre = prefill.setdefault(n, {"params": []})
-        if "meta" not in pre:
-            pre["meta"] = {
-                "Ugello": r.get("Ugello",""),
-                "Durata": r.get("DurataPrelievo",""),
-                "OraInizio": r.get("OraInizio",""),
-                "FiltroQMA": r.get("FiltroQMA",""),
-                "PrelievoMultiplo": r.get("PrelievoMultiplo",""),
-                "Temperatura": r.get("Temperatura",""),
-                "Pressione": r.get("Pressione",""),
-                "Umidita": r.get("Umidita",""),
-                "Meteo": r.get("Meteo",""),
-                "PesoIniSerpentina": r.get("PesoIniSerpentina",""),
-                "PesoFinSerpentina": r.get("PesoFinSerpentina",""),
-                "PesoIniGel": r.get("PesoIniGel",""),
-                "PesoFinGel": r.get("PesoFinGel",""),
-                "Isocinetismo": r.get("Isocinetismo",""),
-                "VelocitàCampionamento": r.get("VelocitàCampionamento",""),
-                "dP": r.get("dP",""),
-                "TemperaturaFumi": r.get("TemperaturaFumi",""),
-                "Note": r.get("Note","")
-            }
-        param = {
-            "Parametro": r.get("Parametro",""),
-            "AltroParametro": r.get("AltroParametro",""),
-            "Pompa": r.get("Pompa",""),
-            "Portata": r.get("Portata",""),
-            "VolumeIniziale": r.get("VolumeIniziale",""),
-            "VolumeFinale": r.get("VolumeFinale",""),
-            "TemperaturaIniziale": r.get("TemperaturaIniziale",""),
-            "TemperaturaFinale": r.get("TemperaturaFinale",""),
-            "VolumeNormalizzato": r.get("VolumeNormalizzato","")
-        }
-        pre["params"].append(param)
-
-# ===============================
-# DATI GENERALI SESSIONE (2 colonne)
+# DATI GENERALI SESSIONE
 # ===============================
 with st.expander("📂 Dati Generali Sessione", expanded=True):
     col1, col2 = st.columns(2)
     with col1:
-        ditta = st.text_input("Ditta", value=(session_rows[0].get("Ditta","") if session_rows else ""))
-        stabilimento = st.text_input("Stabilimento", value=(session_rows[0].get("Stabilimento","") if session_rows else ""))
-        data_campagna = st.date_input("Data campagna", value=date.fromisoformat(session_rows[0].get("Data")) if session_rows and session_rows[0].get("Data") else date.today())
-        camino = st.text_input("Camino", value=(session_rows[0].get("Camino","") if session_rows else ""))
+        ditta = st.text_input("Ditta")
+        stabilimento = st.text_input("Stabilimento")
+        data_campagna = st.date_input("Data campagna", value=date.today())
+        camino = st.text_input("Camino")
     with col2:
-        operatore1 = st.text_input("Operatore 1", value=(session_rows[0].get("Operatore1","") if session_rows else ""))
-        operatore2 = st.text_input("Operatore 2", value=(session_rows[0].get("Operatore2","") if session_rows else ""))
-        pressione_statica = st.number_input("Pressione Statica", value=float(session_rows[0].get("PressioneStatica",0)) if session_rows else 0.0, step=0.1)
-        velocita_camino = st.number_input("Velocità Camino", value=float(session_rows[0].get("VelocitàCamino",0)) if session_rows else 0.0, step=0.1)
+        operatore1 = st.text_input("Operatore 1")
+        operatore2 = st.text_input("Operatore 2")
+        pressione_statica = st.number_input("Pressione Statica", value=0.0, step=0.1)
+        velocita_camino = st.number_input("Velocità Camino", value=0.0, step=0.1)
 
 # ===============================
-# IMPOSTA NUMERO PRELIEVI (prefill se esistente)
+# NUMERO PRELIEVI
 # ===============================
-if prefill:
-    max_prel = max(prefill.keys())
-    num_prelievi = st.number_input("Numero di prelievi", min_value=1, max_value=50, value=max_prel, key="num_prel_prefill")
-else:
-    num_prelievi = st.number_input("Numero di prelievi", min_value=1, max_value=50, value=1, key="num_prel_new")
+num_prelievi = st.number_input("Numero di prelievi", min_value=1, max_value=50, value=1, key="num_prel")
 
 # ===============================
 # PARAMETRI DISPONIBILI
 # ===============================
-PARAMETRI = ["Polveri", "Polveri SiO2", "Acidi", "SOx", "HCl",
-             "HF", "Metalli", "CrVI", "NH3", "SO3",
-             "Fenolo Formaldeide", "SOV", "Altro"]
+PARAMETRI = ["Polveri","Polveri SiO2","Acidi","SOx","HCl",
+             "HF","Metalli","CrVI","NH3","SO3",
+             "Fenolo Formaldeide","SOV","Altro"]
 
 # ===============================
-# RACCOLTA DATI PRELIEVI (UI compatta)
+# RACCOLTA DATI PRELIEVI
 # ===============================
-# raccoglieremo tutte le righe in lista dict 'nuovi_prelievi'
 nuovi_prelievi = []
 
-for i in range(1, int(num_prelievi) + 1):
+for i in range(1, int(num_prelievi)+1):
     with st.expander(f"Prelievo {i}", expanded=False):
-        meta = prefill.get(i, {}).get("meta", {})
         col1, col2, col3 = st.columns([2,2,2])
         with col1:
-            ugello = st.text_input(f"Ugello {i}", value=meta.get("Ugello",""), key=f"ugello_{i}")
-            durata = st.number_input(f"Durata Prelievo {i} (s)", value=float(meta.get("Durata",0)) if meta.get("Durata","")!="" else 0.0, key=f"durata_{i}")
-            ora_inizio = st.time_input(f"Ora Inizio {i}", value=(datetime.strptime(meta.get("OraInizio","00:00"), "%H:%M").time() if meta.get("OraInizio","") else datetime.now().time()), key=f"ora_{i}")
-            filtro_qma = st.text_input(f"Filtro QMA {i}", value=meta.get("FiltroQMA",""), key=f"filtro_{i}")
-            prelievo_multiplo = st.selectbox(f"Prelievo Multiplo {i}", ["NO","SI"], index=0 if meta.get("PrelievoMultiplo","")=="" else (0 if meta.get("PrelievoMultiplo")=="NO" else 1), key=f"multi_{i}")
+            ugello = st.text_input(f"Ugello {i}")
+            durata = st.number_input(f"Durata Prelievo {i} (s)", value=0.0, step=0.1)
+            ora_inizio = st.time_input(f"Ora Inizio {i}", value=datetime.now().time())
+            filtro_qma = st.text_input(f"Filtro QMA {i}")
+            prelievo_multiplo = st.selectbox(f"Prelievo Multiplo {i}", ["NO","SI"], index=0)
         with col2:
-            temperatura = st.number_input(f"Temperatura °C {i}", value=float(meta.get("Temperatura",0)) if meta.get("Temperatura","")!="" else 0.0, key=f"temp_{i}", step=0.1)
-            pressione = st.number_input(f"Pressione hPa {i}", value=float(meta.get("Pressione",1013.25)) if meta.get("Pressione","")!="" else 1013.25, key=f"press_{i}", step=0.1)
-            umidita = st.number_input(f"Umidità % {i}", value=float(meta.get("Umidita",0)) if meta.get("Umidita","")!="" else 0.0, key=f"umid_{i}", step=0.1)
-            meteo = st.selectbox(f"Meteo {i}", ["", "Sereno", "Nuvoloso", "Pioggia", "Vento"], index=0 if meta.get("Meteo","")=="" else ["", "Sereno", "Nuvoloso", "Pioggia", "Vento"].index(meta.get("Meteo","")), key=f"meteo_{i}")
+            temperatura = st.number_input(f"Temperatura °C {i}", value=0.0, step=0.1)
+            pressione = st.number_input(f"Pressione hPa {i}", value=1013.25, step=0.1)
+            umidita = st.number_input(f"Umidità % {i}", value=0.0, step=0.1)
+            meteo = st.selectbox(f"Meteo {i}", ["","Sereno","Nuvoloso","Pioggia","Vento"], index=0)
         with col3:
-            peso_in_serp = st.number_input(f"Peso Iniziale Serpentina {i}", value=float(meta.get("PesoIniSerpentina",0)) if meta.get("PesoIniSerpentina","")!="" else 0.0, key=f"pis_{i}", step=0.01)
-            peso_fin_serp = st.number_input(f"Peso Finale Serpentina {i}", value=float(meta.get("PesoFinSerpentina",0)) if meta.get("PesoFinSerpentina","")!="" else 0.0, key=f"pfs_{i}", step=0.01)
-            peso_in_gel = st.number_input(f"Peso Iniziale Gel {i}", value=float(meta.get("PesoIniGel",0)) if meta.get("PesoIniGel","")!="" else 0.0, key=f"pig_{i}", step=0.01)
-            peso_fin_gel = st.number_input(f"Peso Finale Gel {i}", value=float(meta.get("PesoFinGel",0)) if meta.get("PesoFinGel","")!="" else 0.0, key=f"pfg_{i}", step=0.01)
+            peso_in_serp = st.number_input(f"Peso Iniziale Serpentina {i}", value=0.0, step=0.01)
+            peso_fin_serp = st.number_input(f"Peso Finale Serpentina {i}", value=0.0, step=0.01)
+            peso_in_gel = st.number_input(f"Peso Iniziale Gel {i}", value=0.0, step=0.01)
+            peso_fin_gel = st.number_input(f"Peso Finale Gel {i}", value=0.0, step=0.01)
 
-        # parametri (tabella compatta per ogni prelievo)
-        params_existing = prefill.get(i, {}).get("params", [])
-        num_params_default = len(params_existing) if params_existing else 1
-        num_param = st.number_input(f"Numero di parametri per prelievo {i}", min_value=1, max_value=20, value=num_params_default, key=f"num_param_{i}")
-
+        # numero parametri per prelievo
+        num_param = st.number_input(f"Numero di parametri per prelievo {i}", min_value=1, max_value=20, value=1, key=f"num_param_{i}")
         parametri_prelievo = []
+
         for j in range(1, int(num_param)+1):
-            p_pref = params_existing[j-1] if j-1 < len(params_existing) else {}
-            # layout compatto: param + volumi + temp
             c1, c2, c3, c4 = st.columns([2,1,1,1])
             with c1:
-                parametro = st.selectbox(f"Parametro {j}", PARAMETRI, index=0 if p_pref.get("Parametro","")=="" else (PARAMETRI.index(p_pref.get("Parametro")) if p_pref.get("Parametro") in PARAMETRI else len(PARAMETRI)-1), key=f"param_{i}_{j}")
+                parametro = st.selectbox(f"Parametro {j}", PARAMETRI)
                 if parametro == "Altro":
-                    altro_parametro = st.text_input(f"Specificare parametro {j}", value=p_pref.get("AltroParametro",""), key=f"altro_{i}_{j}")
+                    altro_parametro = st.text_input(f"Specificare parametro {j}")
                     parametro_finale = altro_parametro
                 else:
                     parametro_finale = parametro
             with c2:
-                volume_iniziale = st.number_input(f"Vol in {j}", value=float(p_pref.get("VolumeIniziale",0)) if p_pref.get("VolumeIniziale","")!="" else 0.0, key=f"vol_in_{i}_{j}", step=0.1)
-                volume_finale = st.number_input(f"Vol fin {j}", value=float(p_pref.get("VolumeFinale",0)) if p_pref.get("VolumeFinale","")!="" else 0.0, key=f"vol_fin_{i}_{j}", step=0.1)
+                volume_iniziale = st.number_input(f"Vol in {j}", value=0.0, step=0.1)
+                volume_finale = st.number_input(f"Vol fin {j}", value=0.0, step=0.1)
             with c3:
-                temp_iniziale = st.number_input(f"T in {j}", value=float(p_pref.get("TemperaturaIniziale",0)) if p_pref.get("TemperaturaIniziale","")!="" else 0.0, key=f"temp_in_{i}_{j}", step=0.1)
-                temp_finale = st.number_input(f"T fin {j}", value=float(p_pref.get("TemperaturaFinale",0)) if p_pref.get("TemperaturaFinale","")!="" else 0.0, key=f"temp_fin_{i}_{j}", step=0.1)
+                temp_iniziale = st.number_input(f"T in {j}", value=0.0, step=0.1)
+                temp_finale = st.number_input(f"T fin {j}", value=0.0, step=0.1)
             with c4:
-                # VN calcolato automaticamente (sempre)
                 vn = calcola_volume_normalizzato(volume_iniziale, volume_finale, temp_iniziale, temp_finale, pressione)
                 st.markdown(f"**VN:** `{vn:.6f}`")
 
@@ -265,32 +143,30 @@ for i in range(1, int(num_prelievi) + 1):
                 "VolumeNormalizzato": float(f"{vn:.6f}")
             })
 
-        # scelta quale volume normalizzato usare per l'umidità
+        # scelta VN per calcolo umidità fumi
         vol_choices = [p["VolumeNormalizzato"] for p in parametri_prelievo]
         vol_choice_idx = st.selectbox(
             "Scegli quale Volume Normalizzato usare per il calcolo dell'umidità",
             options=list(range(len(vol_choices))),
-            format_func=lambda x: f"Parametro {x+1} - VN={vol_choices[x]:.6f}",
-            key=f"vol_choice_{i}"
+            format_func=lambda x: f"Parametro {x+1} - VN={vol_choices[x]:.6f}"
         )
         vol_scelto = float(vol_choices[vol_choice_idx])
 
-        # calcolo umidità fumi (usa vol_scelto)
         volume_h2o = ((peso_fin_serp - peso_in_serp) + (peso_fin_gel - peso_in_gel)) / 18 * 22.414
         volume_totale = volume_h2o + vol_scelto
         umidita_fumi = (volume_h2o / volume_totale) if volume_totale != 0 else 0.0
 
-        st.info(f"Volume H2O: {volume_h2o:.4f}  — Volume scelto: {vol_scelto:.6f}  — Volume Totale: {volume_totale:.4f}")
+        st.info(f"Volume H2O: {volume_h2o:.4f} — Volume scelto: {vol_scelto:.6f} — Volume Totale: {volume_totale:.4f}")
         st.info(f"Umidità fumi (calcolata): {umidita_fumi:.6f}")
 
-        # medie e note
-        isocinetismo = st.number_input(f"Isocinetismo {i}", value=float(meta.get("Isocinetismo",0)) if meta.get("Isocinetismo","")!="" else 0.0, key=f"isoc_{i}", step=0.1)
-        velocita_media = st.number_input(f"Velocità media {i}", value=float(meta.get("VelocitàCampionamento",0)) if meta.get("VelocitàCampionamento","")!="" else 0.0, key=f"vel_{i}", step=0.1)
-        dp = st.number_input(f"dP {i}", value=float(meta.get("dP",0)) if meta.get("dP","")!="" else 0.0, key=f"dp_{i}", step=0.1)
-        temp_fumi = st.number_input(f"Temperatura Fumi {i}", value=float(meta.get("TemperaturaFumi",0)) if meta.get("TemperaturaFumi","")!="" else 0.0, key=f"temp_fumi_{i}", step=0.1)
-        note = st.text_area(f"Note prelievo {i}", value=meta.get("Note",""), key=f"note_{i}")
+        # altri parametri
+        isocinetismo = st.number_input(f"Isocinetismo {i}", value=0.0, step=0.1)
+        velocita_media = st.number_input(f"Velocità media {i}", value=0.0, step=0.1)
+        dp = st.number_input(f"dP {i}", value=0.0, step=0.1)
+        temp_fumi = st.number_input(f"Temperatura Fumi {i}", value=0.0, step=0.1)
+        note = st.text_area(f"Note prelievo {i}")
 
-        # aggiungo righe (una riga per parametro)
+        # aggiungo righe
         for p in parametri_prelievo:
             row = {
                 "SessionID": SessionID,
@@ -354,54 +230,30 @@ for i in range(1, int(num_prelievi) + 1):
             nuovi_prelievi.append(row)
 
 # ===============================
-# RIEPILOGO (tabella modificabile) - mostriamo SOLO campi principali
-# ===============================
-if nuovi_prelievi:
-    df_preview = pd.DataFrame(nuovi_prelievi)
-    # colonne principali da mostrare/modificare
-    cols_preview = ["PrelievoN","Parametro","VolumeIniziale","VolumeFinale","VolumeNormalizzato","UmiditaFumi","Isocinetismo","DurataPrelievo"]
-    # assicurati che esistano
-    cols_preview = [c for c in cols_preview if c in df_preview.columns]
-    st.subheader("Anteprima parametri (modificabile)")
-    edited_df = st.data_editor(df_preview[cols_preview], num_rows="dynamic")
-else:
-    edited_df = None
-    st.info("Nessun prelievo inserito / selezionato.")
-
-# ===============================
-# PULSANTE SALVA (DELETE session rows -> APPEND new rows)
+# PULSANTE SALVA
 # ===============================
 if st.button("💾 Salva campionamenti"):
     if not nuovi_prelievi:
         st.warning("Nessun dato da salvare.")
     else:
-        # se l'utente ha modificato la preview, applica le modifiche a nuovi_prelievi
-        if edited_df is not None:
-            # mappa le modifiche: ediited_df rows corrispondono a nuovi_prelievi nell'ordine
-            for idx, row_edit in edited_df.reset_index(drop=True).iterrows():
-                # aggiorna solo le colonne visibili (se presenti)
-                for col in row_edit.index:
-                    colname = col
-                    novos_val = row_edit[col]
-                    # trova la corrispondente voce in nuovi_prelievi
-                    try:
-                        novos_prelievo = novos[idx]
-                        if colname in novos_prelievo:
-                            novos_prelievo[colname] = novos_val
-                    except Exception:
-                        pass
-
         try:
-            delete_rows_for_session(SessionID)
-            # prepara liste in ordine HEADER
-            rows_to_append = []
-            for r in novos:
-                row_values = [r.get(col,"") for col in HEADER]
-                rows_to_append.append(row_values)
-            append_rows(rows_to_append)
+            # --- connessione a Google Sheets SOLO qui ---
+            SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+            SERVICE_ACCOUNT_INFO = st.secrets["google_service_account"]
+            creds = Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
+            client = gspread.authorize(creds)
+            SHEET_ID = "1KCPltH_8EtI5svqRivdwI68DWJ6eE1IK3UDe45PENf8"
+            sheet = client.open_by_key(SHEET_ID).sheet1
+
+            # elimina righe vecchie
+            all_vals = sheet.get_all_values()
+            rows_to_delete = [idx+2 for idx, r in enumerate(all_vals[1:]) if r[0] == SessionID]
+            for r in sorted(rows_to_delete, reverse=True):
+                sheet.delete_rows(r)
+
+            # append nuove righe
+            rows_to_append = [[r.get(col,"") for col in HEADER] for r in nuovi_prelievi]
+            sheet.append_rows(rows_to_append, value_input_option="USER_ENTERED")
             st.success("Dati salvati correttamente su Google Sheets!")
-            # aggiorna session_ids in UI
-            if SessionID not in session_ids:
-                session_ids.insert(0, SessionID)
         except Exception as e:
             st.error(f"Errore durante il salvataggio: {e}")
