@@ -1,4 +1,4 @@
-# campionamenti_streamlit_finale.py
+# campionamenti_streamlit_completo.py
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -87,6 +87,17 @@ def calcola_volume_normalizzato(vol_in,vol_fin,temp_in,temp_fin,pressione_hpa):
     except:
         return 0.0
 
+def calcola_umidita(peso_ini_serp,peso_fin_serp,peso_ini_gel,peso_fin_gel,volume_norm):
+    try:
+        peso_acqua_serp = peso_fin_serp - peso_ini_serp
+        peso_acqua_gel = peso_fin_gel - peso_ini_gel
+        peso_acqua_tot = peso_acqua_serp + peso_acqua_gel
+        vol_acqua = peso_acqua_tot/18*22.414
+        vol_totale = vol_acqua + volume_norm
+        return vol_acqua/vol_totale*100 if vol_totale>0 else 0.0
+    except:
+        return 0.0
+
 # ===============================
 # INIT
 # ===============================
@@ -130,6 +141,8 @@ if selected_session=="➕ Nuova sessione":
     SessionID = None
 else:
     SessionID = selected_session
+    # Se vuoi il prefill solo su richiamo sessione, qui potresti aggiungere il caricamento dei valori da records
+    # Esempio: cerca record con SessionID == selected_session e popola variabili generali e prelievi
 
 # ===============================
 # BARRA LATERALE: navigazione
@@ -179,7 +192,7 @@ if sezione=="Prelievi":
             ora_inizio = st.time_input(f"Ora Inizio {i}",value=datetime.now().time())
             filtro_qma = st.text_input(f"Filtro QMA {i}")
             prelievo_multiplo = st.selectbox(f"Prelievo Multiplo {i}",["NO","SI"])
-            temperatura = st.number_input(f"Temperatura °C {i}",value=0,step=0.1)
+            temperatura = st.number_input(f"Temperatura °C {i}",value=0.0,step=0.1)
             pressione = st.number_input(f"Pressione hPa {i}",value=1013.25,step=0.1)
             umidita = st.number_input(f"Umidità % {i}",value=0.0,step=0.1)
             meteo = st.selectbox(f"Meteo {i}",["","Sereno","Nuvoloso","Pioggia","Vento"])
@@ -223,12 +236,22 @@ if sezione=="Prelievi":
                 "PesoIniGel":peso_in_gel,"PesoFinGel":peso_fin_gel,"Parametri":parametri
             })
 
+    # ===============================
+    # BOTTONI CALCOLO
+    # ===============================
+    if st.button("Calcola Umidità Prelievi"):
+        for idx,prel in enumerate(prelievi,1):
+            for j,p in enumerate(prel["Parametri"],1):
+                umid = calcola_umidita(prel["PesoIniSerpentina"],prel["PesoFinSerpentina"],prel["PesoIniGel"],prel["PesoFinGel"],p["VolumeNormalizzato"])
+                st.write(f"Umidità Prelievo {idx}, Parametro {j}: {umid:.2f}%")
+
     if st.button("Salva prelievi su Google Sheet"):
         SessionID = f"{ditta}{stabilimento}[{data_campionamento.strftime('%d%m%Y')}_{camino}]"
         delete_rows_for_session(SessionID)
         rows_to_save=[]
         for idx,prel in enumerate(prelievi,1):
             for p in prel["Parametri"]:
+                umid_fumi = calcola_umidita(prel["PesoIniSerpentina"],prel["PesoFinSerpentina"],prel["PesoIniGel"],prel["PesoFinGel"],p["VolumeNormalizzato"])
                 row = [
                     SessionID,ditta,stabilimento,data_campionamento.strftime("%d/%m/%Y"),camino,
                     operatore1,operatore2,pressione_statica,velocita_camino,angolo_swirl,
@@ -238,7 +261,7 @@ if sezione=="Prelievi":
                     prel["Temperatura"],prel["Pressione"],prel["Umidita"],prel["Meteo"],
                     p["Parametro"],p["AltroParametro"],p["Pompa"],p["Portata"],
                     p["VolumeIniziale"],p["VolumeFinale"],p["TemperaturaIniziale"],p["TemperaturaFinale"],p["VolumeNormalizzato"],
-                    prel["PesoIniSerpentina"],prel["PesoFinSerpentina"],prel["PesoIniGel"],prel["PesoFinGel"],0.0,
+                    prel["PesoIniSerpentina"],prel["PesoFinSerpentina"],prel["PesoIniGel"],prel["PesoFinGel"],umid_fumi,
                     0.0,0.0,0.0,0.0,""
                 ]
                 rows_to_save.append(row)
