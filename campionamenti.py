@@ -1,9 +1,9 @@
-# campionamenti_streamlit_completo.py
+# campionamenti_streamlit_sidebar.py
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
-from datetime import datetime, date, time
+from datetime import datetime, date
 
 st.set_page_config(layout="wide")
 
@@ -40,13 +40,15 @@ HEADER = [
 def safe_get_all_records():
     try:
         return sheet.get_all_records()
-    except:
+    except Exception as e:
+        st.error(f"Errore connessione a Google Sheets: {e}")
         return []
 
 def safe_get_all_values():
     try:
         return sheet.get_all_values()
-    except:
+    except Exception as e:
+        st.error(f"Errore connessione a Google Sheets: {e}")
         return []
 
 def ensure_header():
@@ -54,48 +56,37 @@ def ensure_header():
         row1 = sheet.row_values(1)
         if not row1 or row1[:len(HEADER)] != HEADER[:len(row1)]:
             sheet.insert_row(HEADER, index=1)
-    except:
-        pass
+    except Exception as e:
+        st.warning(f"Impossibile assicurare header: {e}")
 
 def delete_rows_for_session(session_id):
     try:
         all_vals = safe_get_all_values()
-        if not all_vals or len(all_vals)<=1:
+        if not all_vals or len(all_vals) <= 1:
             return
-        rows_to_delete=[]
-        for idx,row in enumerate(all_vals[1:],start=2):
-            if len(row)>=1 and row[0]==session_id:
+        rows_to_delete = []
+        for idx, row in enumerate(all_vals[1:], start=2):
+            if len(row) >= 1 and row[0] == session_id:
                 rows_to_delete.append(idx)
-        for r in sorted(rows_to_delete,reverse=True):
+        for r in sorted(rows_to_delete, reverse=True):
             sheet.delete_rows(r)
-    except:
-        pass
+    except Exception as e:
+        st.error(f"Errore eliminazione righe sessione: {e}")
 
 def append_rows(rows):
     if not rows:
         return
     try:
-        sheet.append_rows(rows,value_input_option="USER_ENTERED")
-    except:
-        pass
+        sheet.append_rows(rows, value_input_option="USER_ENTERED")
+    except Exception as e:
+        st.error(f"Errore append su Google Sheets: {e}")
 
-def calcola_volume_normalizzato(vol_in,vol_fin,temp_in,temp_fin,pressione_hpa):
+def calcola_volume_normalizzato(vol_in, vol_fin, temp_in, temp_fin, pressione_hpa):
     try:
-        vol_delta = float(vol_fin)-float(vol_in)
-        temp_media = (float(temp_in)+float(temp_fin))/2.0
-        return vol_delta*(273.15/(temp_media+273.15))*(float(pressione_hpa)/1013.25)
-    except:
-        return 0.0
-
-def calcola_umidita(peso_ini_serp,peso_fin_serp,peso_ini_gel,peso_fin_gel,volume_norm):
-    try:
-        peso_acqua_serp = peso_fin_serp - peso_ini_serp
-        peso_acqua_gel = peso_fin_gel - peso_ini_gel
-        peso_acqua_tot = peso_acqua_serp + peso_acqua_gel
-        vol_acqua = peso_acqua_tot/18*22.414
-        vol_totale = vol_acqua + volume_norm
-        return vol_acqua/vol_totale*100 if vol_totale>0 else 0.0
-    except:
+        vol_delta = float(vol_fin) - float(vol_in)
+        temp_media = (float(temp_in) + float(temp_fin)) / 2.0
+        return vol_delta * (273.15 / (temp_media + 273.15)) * (float(pressione_hpa) / 1013.25)
+    except Exception:
         return 0.0
 
 # ===============================
@@ -104,166 +95,212 @@ def calcola_umidita(peso_ini_serp,peso_fin_serp,peso_ini_gel,peso_fin_gel,volume
 ensure_header()
 records = safe_get_all_records()
 
-# Dati generali inizializzati
-ditta = ""
-stabilimento = ""
-data_campionamento = date.today()
-camino = ""
-operatore1=""
-operatore2=""
-pressione_statica=0.0
-velocita_camino=0.0
-angolo_swirl=0.0
-diametro_progetto=0.0
-diametro_misurato=0.0
-numero_bocchelli=0
-diametri_a_monte=""
-diametri_a_valle=""
-tipo_valle=""
-analizzatore=""
-cert_mix=""
-cert_o2=""
-pc=""
-laser=""
-micromanometro=""
-termocoppia=""
-darcy=""
-kdarcy=0.0
+# ===============================
+# BARRA LATERALE
+# ===============================
+with st.sidebar:
+    st.title("📂 Navigazione")
+    st.markdown("Seleziona la sessione o crea nuova sessione:")
+    session_ids = sorted(list({r["SessionID"] for r in records if r.get("SessionID")}), reverse=True)
+    session_ids_display = ["➕ Nuova sessione"] + session_ids
+    selected_session = st.selectbox("SessionID", session_ids_display)
 
 # ===============================
-# SESSIONI
+# CREAZIONE O RICHIAMO SESSIONE
 # ===============================
-session_ids = sorted(list({r["SessionID"] for r in records if r.get("SessionID")}), reverse=True)
-session_ids_display = ["➕ Nuova sessione"]+session_ids
-selected_session = st.sidebar.selectbox("Seleziona SessionID o crea nuova sessione", session_ids_display)
-
-if selected_session=="➕ Nuova sessione":
-    SessionID = None
+if selected_session == "➕ Nuova sessione":
+    current_session = None
+    SessionID = ""
 else:
-    SessionID = selected_session
-    # Se vuoi il prefill solo su richiamo sessione, qui potresti aggiungere il caricamento dei valori da records
-    # Esempio: cerca record con SessionID == selected_session e popola variabili generali e prelievi
+    current_session = selected_session
+    SessionID = current_session
 
 # ===============================
-# BARRA LATERALE: navigazione
+# FORM PRINCIPALE
 # ===============================
-sezione = st.sidebar.radio("Sezione",["Dati Generali","Prelievi","Riepilogo"])
+st.title("📋 Modulo Campionamenti Ambientali — Versione Sidebar")
+with st.form("campionamento_form"):
+    col1, col2 = st.columns(2)
+    with col1:
+        ditta = st.text_input("Ditta")
+        stabilimento = st.text_input("Stabilimento")
+        data_campagna = st.date_input("Data campagna", value=date.today())
+        camino = st.text_input("Camino")
+        angolo_swirl = st.number_input("Angolo di Swirl", value=0.0)
+        diametro_progetto = st.number_input("Diametro Progetto", value=0.0)
+        diametro_misurato = st.number_input("Diametro Misurato", value=0.0)
+        numero_bocchelli = st.number_input("Numero Bocchelli", value=0)
+        diametri_amonte = st.selectbox("Diametri a monte", [">5","<5"])
+        diametri_aval = st.selectbox("Diametri a valle", [">5 sbocco camino/>2 curva","<5 sbocco camino/<2 curva"])
+        analizzatore = st.selectbox("Analizzatore", ["Horiba","EL3000","MRU","FID","Altro"])
+        cert_mix = st.text_input("CertMix")
+        cert_o2 = st.text_input("CertO2")
+        pc = st.text_input("PC")
+        laser = st.text_input("Laser")
+        micromanometro = st.text_input("Micromanometro")
+        termocoppia = st.text_input("Termocoppia")
+        darcy = st.text_input("Darcy")
+        kdarcy = st.number_input("KDarcy", value=0.0)
+    with col2:
+        operatore1 = st.text_input("Operatore 1")
+        operatore2 = st.text_input("Operatore 2")
+        pressione_statica = st.number_input("Pressione Statica", value=0.0)
+        velocita_camino = st.number_input("Velocità Camino", value=0.0)
 
-# ===============================
-# DATI GENERALI
-# ===============================
-if sezione=="Dati Generali":
-    ditta = st.text_input("Ditta",value=ditta)
-    stabilimento = st.text_input("Stabilimento",value=stabilimento)
-    data_campionamento = st.date_input("Data campagna",value=data_campionamento)
-    camino = st.text_input("Camino",value=camino)
-    operatore1 = st.text_input("Operatore1",value=operatore1)
-    operatore2 = st.text_input("Operatore2",value=operatore2)
-    pressione_statica = st.number_input("Pressione Statica",value=pressione_statica,step=0.1)
-    velocita_camino = st.number_input("Velocità Camino",value=velocita_camino,step=0.1)
-    angolo_swirl = st.number_input("Angolo Di Swirl",value=angolo_swirl,step=0.1)
-    diametro_progetto = st.number_input("Diametro Progetto",value=diametro_progetto,step=0.1)
-    diametro_misurato = st.number_input("Diametro Misurato",value=diametro_misurato,step=0.1)
-    numero_bocchelli = st.number_input("Numero Bocchelli",value=numero_bocchelli,step=1)
-    diametri_a_monte = st.selectbox("Diametri A Monte",[">5","<5"])
-    diametri_a_valle = st.selectbox("Diametri A Valle",[">5 sbocco camino/>2 curva","<5 sbocco camino/<2 curva"])
-    analizzatore = st.selectbox("Analizzatore",["Horiba","EL3000","MRU","FID","Altro"])
-    cert_mix = st.text_input("CertMix",value=cert_mix)
-    cert_o2 = st.text_input("CertO2",value=cert_o2)
-    pc = st.text_input("PC",value=pc)
-    laser = st.text_input("Laser",value=laser)
-    micromanometro = st.text_input("Micromanometro",value=micromanometro)
-    termocoppia = st.text_input("Termocoppia",value=termocoppia)
-    darcy = st.text_input("Darcy",value=darcy)
-    kdarcy = st.number_input("K Darcy",value=kdarcy,step=0.1)
+    num_prelievi = st.number_input("Numero Prelievi", min_value=1, max_value=50, value=1)
 
-# ===============================
-# PRELIEVI
-# ===============================
-if sezione=="Prelievi":
-    num_prelievi = st.number_input("Numero Prelievi",min_value=1,max_value=50,value=1)
-    prelievi=[]
-    PARAMETRI=["Polveri","Polveri SiO2","Acidi","SOx","HCl","HF","Metalli","CrVI","NH3","SO3","Fenolo Formaldeide","SOV","Altro"]
+    PARAMETRI = ["Polveri", "Polveri SiO2", "Acidi", "SOx", "HCl",
+                 "HF", "Metalli", "CrVI", "NH3", "SO3",
+                 "Fenolo Formaldeide", "SOV", "Altro"]
 
-    for i in range(1,int(num_prelievi)+1):
-        with st.expander(f"Prelievo {i}",expanded=False):
-            ugello = st.number_input(f"Ugello {i}",value=0,step=1)
-            durata = st.number_input(f"Durata {i} (s)",value=0,step=0.1)
-            ora_inizio = st.time_input(f"Ora Inizio {i}",value=datetime.now().time())
-            filtro_qma = st.text_input(f"Filtro QMA {i}")
-            prelievo_multiplo = st.selectbox(f"Prelievo Multiplo {i}",["NO","SI"])
-            temperatura = st.number_input(f"Temperatura °C {i}",value=0.0,step=0.1)
-            pressione = st.number_input(f"Pressione hPa {i}",value=1013.25,step=0.1)
-            umidita = st.number_input(f"Umidità % {i}",value=0.0,step=0.1)
-            meteo = st.selectbox(f"Meteo {i}",["","Sereno","Nuvoloso","Pioggia","Vento"])
-            peso_in_serp = st.number_input(f"Peso Iniziale Serpentina {i}",value=0.0,step=0.01)
-            peso_fin_serp = st.number_input(f"Peso Finale Serpentina {i}",value=0.0,step=0.01)
-            peso_in_gel = st.number_input(f"Peso Iniziale Gel {i}",value=0.0,step=0.01)
-            peso_fin_gel = st.number_input(f"Peso Finale Gel {i}",value=0.0,step=0.01)
+    prelievi = []
+    for i in range(1, num_prelievi+1):
+        st.subheader(f"Prelievo {i}")
+        ugello = st.number_input(f"Ugello {i}", value=0)
+        durata = st.number_input(f"Durata Prelievo {i} (s)", value=0.0)
+        ora_inizio = st.time_input(f"Ora Inizio {i}", value=datetime.now().time())
+        filtro_qma = st.text_input(f"Filtro QMA {i}")
+        prelievo_multiplo = st.selectbox(f"Prelievo Multiplo {i}", ["NO","SI"])
+        temperatura = st.number_input(f"Temperatura °C {i}", value=0.0)
+        pressione = st.number_input(f"Pressione hPa {i}", value=1013.25)
+        umidita = st.number_input(f"Umidità % {i}", value=0.0)
+        meteo = st.selectbox(f"Meteo {i}", ["", "Sereno", "Nuvoloso", "Pioggia", "Vento"])
+        peso_in_serp = st.number_input(f"Peso Iniziale Serpentina {i}", value=0.0)
+        peso_fin_serp = st.number_input(f"Peso Finale Serpentina {i}", value=0.0)
+        peso_in_gel = st.number_input(f"Peso Iniziale Gel {i}", value=0.0)
+        peso_fin_gel = st.number_input(f"Peso Finale Gel {i}", value=0.0)
+        isocinetismo = st.number_input(f"Isocinetismo {i}", value=0.0)
+        vel_media = st.number_input(f"Velocità media {i}", value=0.0)
+        dp = st.number_input(f"dP {i}", value=0.0)
+        temp_fumi = st.number_input(f"Temperatura Fumi {i}", value=0.0)
+        note = st.text_area(f"Note {i}")
 
-            num_param = st.number_input(f"Numero parametri {i}",min_value=1,max_value=20,value=1)
-            parametri=[]
-            for j in range(1,int(num_param)+1):
-                parametro = st.selectbox(f"Parametro {j}",PARAMETRI)
-                altro_parametro = ""
-                if parametro=="Altro":
-                    altro_parametro=st.text_input(f"Specificare {j}")
-                volume_iniziale = st.number_input(f"Vol In {j}",value=0.0,step=0.1)
-                volume_finale = st.number_input(f"Vol Fin {j}",value=0.0,step=0.1)
-                temp_iniziale = st.number_input(f"T In {j}",value=0.0,step=0.1)
-                temp_finale = st.number_input(f"T Fin {j}",value=0.0,step=0.1)
-                vn=calcola_volume_normalizzato(volume_iniziale,volume_finale,temp_iniziale,temp_finale,pressione)
-                st.write(f"Volume Normalizzato {j}: {vn:.6f}")
-                pompa = st.text_input(f"Pompa {j}")
-                portata = st.number_input(f"Portata {j}",value=0.0,step=0.01)
-
-                parametri.append({
-                    "Parametro": parametro,
-                    "AltroParametro": altro_parametro,
-                    "VolumeIniziale": volume_iniziale,
-                    "VolumeFinale": volume_finale,
-                    "TemperaturaIniziale": temp_iniziale,
-                    "TemperaturaFinale": temp_finale,
-                    "VolumeNormalizzato": vn,
-                    "Pompa": pompa,
-                    "Portata": portata
-                })
-
-            prelievi.append({
-                "Ugello":ugello,"DurataPrelievo":durata,"OraInizio":ora_inizio,"FiltroQMA":filtro_qma,
-                "PrelievoMultiplo":prelievo_multiplo,"Temperatura":temperatura,"Pressione":pressione,"Umidita":umidita,
-                "Meteo":meteo,"PesoIniSerpentina":peso_in_serp,"PesoFinSerpentina":peso_fin_serp,
-                "PesoIniGel":peso_in_gel,"PesoFinGel":peso_fin_gel,"Parametri":parametri
+        num_param = st.number_input(f"Numero Parametri {i}", min_value=1, max_value=20, value=1)
+        parametri_prelievo = []
+        for j in range(1, num_param+1):
+            parametro = st.selectbox(f"Parametro {j}", PARAMETRI)
+            altro_parametro = st.text_input(f"Altro Parametro {j}") if parametro=="Altro" else ""
+            pompa = st.text_input(f"Pompa {j}")
+            portata = st.number_input(f"Portata {j}", value=0.0)
+            vol_in = st.number_input(f"Volume Iniziale {j}", value=0.0)
+            vol_fin = st.number_input(f"Volume Finale {j}", value=0.0)
+            temp_in = st.number_input(f"Temperatura Iniziale {j}", value=0.0)
+            temp_fin = st.number_input(f"Temperatura Finale {j}", value=0.0)
+            vn = calcola_volume_normalizzato(vol_in, vol_fin, temp_in, temp_fin, pressione)
+            parametri_prelievo.append({
+                "Parametro": parametro,
+                "AltroParametro": altro_parametro,
+                "Pompa": pompa,
+                "Portata": portata,
+                "VolumeIniziale": vol_in,
+                "VolumeFinale": vol_fin,
+                "TemperaturaIniziale": temp_in,
+                "TemperaturaFinale": temp_fin,
+                "VolumeNormalizzato": vn
             })
 
-    # ===============================
-    # BOTTONI CALCOLO
-    # ===============================
-    if st.button("Calcola Umidità Prelievi"):
-        for idx,prel in enumerate(prelievi,1):
-            for j,p in enumerate(prel["Parametri"],1):
-                umid = calcola_umidita(prel["PesoIniSerpentina"],prel["PesoFinSerpentina"],prel["PesoIniGel"],prel["PesoFinGel"],p["VolumeNormalizzato"])
-                st.write(f"Umidità Prelievo {idx}, Parametro {j}: {umid:.2f}%")
+        # Calcolo umidità
+        if st.form_submit_button(f"Calcola Umidità Prelievo {i}"):
+            peso_acqua_serp = peso_fin_serp - peso_in_serp
+            peso_acqua_gel = peso_fin_gel - peso_in_gel
+            peso_tot = peso_acqua_serp + peso_acqua_gel
+            vol_acqua = (peso_tot / 18) * 22.414
+            # scelgo il primo VN come default
+            vol_scelto = parametri_prelievo[0]["VolumeNormalizzato"]
+            vol_tot = vol_acqua + vol_scelto
+            umidita_fumi = (vol_acqua / vol_tot * 100) if vol_tot!=0 else 0.0
+            st.success(f"Umidità fumi Prelievo {i}: {umidita_fumi:.2f}%")
 
-    if st.button("Salva prelievi su Google Sheet"):
-        SessionID = f"{ditta}{stabilimento}[{data_campionamento.strftime('%d%m%Y')}_{camino}]"
-        delete_rows_for_session(SessionID)
-        rows_to_save=[]
-        for idx,prel in enumerate(prelievi,1):
-            for p in prel["Parametri"]:
-                umid_fumi = calcola_umidita(prel["PesoIniSerpentina"],prel["PesoFinSerpentina"],prel["PesoIniGel"],prel["PesoFinGel"],p["VolumeNormalizzato"])
-                row = [
-                    SessionID,ditta,stabilimento,data_campionamento.strftime("%d/%m/%Y"),camino,
-                    operatore1,operatore2,pressione_statica,velocita_camino,angolo_swirl,
-                    diametro_progetto,diametro_misurato,numero_bocchelli,diametri_a_monte,diametri_a_valle,tipo_valle,
-                    analizzatore,cert_mix,cert_o2,pc,laser,micromanometro,termocoppia,darcy,kdarcy,
-                    idx,prel["Ugello"],prel["DurataPrelievo"],prel["OraInizio"].strftime("%H:%M"),prel["FiltroQMA"],prel["PrelievoMultiplo"],
-                    prel["Temperatura"],prel["Pressione"],prel["Umidita"],prel["Meteo"],
-                    p["Parametro"],p["AltroParametro"],p["Pompa"],p["Portata"],
-                    p["VolumeIniziale"],p["VolumeFinale"],p["TemperaturaIniziale"],p["TemperaturaFinale"],p["VolumeNormalizzato"],
-                    prel["PesoIniSerpentina"],prel["PesoFinSerpentina"],prel["PesoIniGel"],prel["PesoFinGel"],umid_fumi,
-                    0.0,0.0,0.0,0.0,""
-                ]
-                rows_to_save.append(row)
-        append_rows(rows_to_save)
-        st.success("Dati salvati correttamente!")
+        prelievi.append({
+            "ugello": ugello,
+            "durata": durata,
+            "ora_inizio": ora_inizio,
+            "filtro_qma": filtro_qma,
+            "prelievo_multiplo": prelievo_multiplo,
+            "temperatura": temperatura,
+            "pressione": pressione,
+            "umidita": umidita,
+            "meteo": meteo,
+            "peso_in_serp": peso_in_serp,
+            "peso_fin_serp": peso_fin_serp,
+            "peso_in_gel": peso_in_gel,
+            "peso_fin_gel": peso_fin_gel,
+            "isocinetismo": isocinetismo,
+            "vel_media": vel_media,
+            "dp": dp,
+            "temp_fumi": temp_fumi,
+            "note": note,
+            "parametri": parametri_prelievo
+        })
+
+    submitted = st.form_submit_button("💾 Salva Campionamenti")
+
+if submitted:
+    # genera SessionID leggibile
+    if not SessionID:
+        SessionID = f"{ditta}_{stabilimento}_{data_campagna.strftime('%Y%m%d')}_{camino}"
+    rows_to_append = []
+    for idx, p in enumerate(prelievi, start=1):
+        for param in p["parametri"]:
+            row = {col:"" for col in HEADER}
+            row.update({
+                "SessionID": SessionID,
+                "Ditta": ditta,
+                "Stabilimento": stabilimento,
+                "Data": data_campagna.strftime("%d/%m/%Y"),
+                "Camino": camino,
+                "Operatore1": operatore1,
+                "Operatore2": operatore2,
+                "PressioneStatica": pressione_statica,
+                "VelocitàCamino": velocita_camino,
+                "AngoloDiSwirl": angolo_swirl,
+                "DiametroProgetto": diametro_progetto,
+                "DiametroMisurato": diametro_misurato,
+                "NumeroBocchelli": numero_bocchelli,
+                "DiametriAMonte": diametri_amonte,
+                "DiametriAValle": diametri_aval,
+                "Analizzatore": analizzatore,
+                "CertMix": cert_mix,
+                "CertO2": cert_o2,
+                "PC": pc,
+                "Laser": laser,
+                "Micromanometro": micromanometro,
+                "Termocoppia": termocoppia,
+                "Darcy": darcy,
+                "KDarcy": kdarcy,
+                "PrelievoN": idx,
+                "Ugello": p["ugello"],
+                "DurataPrelievo": p["durata"],
+                "OraInizio": p["ora_inizio"].strftime("%H:%M:%S"),
+                "FiltroQMA": p["filtro_qma"],
+                "PrelievoMultiplo": p["prelievo_multiplo"],
+                "Temperatura": p["temperatura"],
+                "Pressione": p["pressione"],
+                "Umidita": p["umidita"],
+                "Meteo": p["meteo"],
+                "Parametro": param["Parametro"],
+                "AltroParametro": param["AltroParametro"],
+                "Pompa": param["Pompa"],
+                "Portata": param["Portata"],
+                "VolumeIniziale": param["VolumeIniziale"],
+                "VolumeFinale": param["VolumeFinale"],
+                "TemperaturaIniziale": param["TemperaturaIniziale"],
+                "TemperaturaFinale": param["TemperaturaFinale"],
+                "VolumeNormalizzato": param["VolumeNormalizzato"],
+                "PesoIniSerpentina": p["peso_in_serp"],
+                "PesoFinSerpentina": p["peso_fin_serp"],
+                "PesoIniGel": p["peso_in_gel"],
+                "PesoFinGel": p["peso_fin_gel"],
+                "Isocinetismo": p["isocinetismo"],
+                "VelocitàCampionamento": p["vel_media"],
+                "dP": p["dp"],
+                "TemperaturaFumi": p["temp_fumi"],
+                "Note": p["note"],
+                "Ultima_Modifica": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            })
+            rows_to_append.append([row.get(c, "") for c in HEADER])
+
+    # elimina eventuali righe esistenti per sessione
+    delete_rows_for_session(SessionID)
+    append_rows(rows_to_append)
+    st.success(f"✅ Campionamento salvato con SessionID: {SessionID}")
