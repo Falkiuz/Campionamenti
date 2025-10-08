@@ -314,7 +314,7 @@ for i in range(1, int(num_prelievi) + 1):
                     press = st.session_state.get(f"press_{i}", 1013.25)
                     vn = calcola_volume_normalizzato(vol_in, vol_fin, temp_in, temp_fin, press)
                     st.session_state[f"vn_{i}_{j_idx}"] = float(f"{vn:.6f}")
-                st.experimental_rerun()  # per aggiornare i valori mostrati
+                st.rerun() # per aggiornare i valori mostrati
 
         with col_calc2:
             # scelta quale VN usare per umidità -> se vn_list ha None, proviamo comunque a calcolare al volo per mostrare opzioni
@@ -476,3 +476,4 @@ if st.button("💾 Salva campionamenti su Google Sheets"):
                 st.success(f"✅ Sessione {SessionID} salvata ({len(rows_to_append)} righe).")
             except Exception as e:
                 st.error(f"Errore durante il salvataggio: {e}")
+
