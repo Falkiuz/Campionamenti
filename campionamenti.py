@@ -134,7 +134,8 @@ if selected_session == "➕ Nuova sessione":
 
     sanitized_d = (ditta.strip().replace(" ", "_") or "Ditta")
     sanitized_s = (stabilimento.strip().replace(" ", "_") or "Stab")
-    SessionID = f"{sanitized_d}_{sanitized_s}_{data_campagna.strftime('%Y%m%d')}"
+    sanitized_c = (camino.strip().replace(" ", "_") or "Camino")
+    SessionID = f"{sanitized_d}_{sanitized_s}_{sanitized_c}_{data_campagna.strftime('%Y%m%d')}"
 else:
     SessionID = selected_session
     ditta = stabilimento = camino = operatore1 = operatore2 = ""
@@ -156,12 +157,24 @@ else:
 # ===============================
 # DATI GENERALI
 # ===============================
+def safe_float(value):
+    try:
+        return float(value)
+    except:
+        return 0.0
+
+def safe_int(value):
+    try:
+        return int(value)
+    except:
+        return 0
+
 with st.expander("📂 Dati generali", expanded=True):
     default_row = rows[0] if prefill_enabled and sheet_read and rows else {}
-    angolo_swirl = st.number_input("AngoloDiSwirl", value=float(default_row.get("AngoloDiSwirl",0)), step=0.1, key="angolo_swirl")
-    diametro_progetto = st.number_input("DiametroProgetto", value=float(default_row.get("DiametroProgetto",0)), step=0.1, key="diametro_progetto")
-    diametro_misurato = st.number_input("DiametroMisurato", value=float(default_row.get("DiametroMisurato",0)), step=0.1, key="diametro_misurato")
-    numero_bocchelli = st.number_input("NumeroBocchelli", value=int(default_row.get("NumeroBocchelli",0)), step=1, key="numero_bocchelli")
+    angolo_swirl = st.number_input("AngoloDiSwirl", value=safe_float(default_row.get("AngoloDiSwirl",0)), step=0.1, key="angolo_swirl")
+    diametro_progetto = st.number_input("DiametroProgetto", value=safe_float(default_row.get("DiametroProgetto",0)), step=0.1, key="diametro_progetto")
+    diametro_misurato = st.number_input("DiametroMisurato", value=safe_float(default_row.get("DiametroMisurato",0)), step=0.1, key="diametro_misurato")
+    numero_bocchelli = st.number_input("NumeroBocchelli", value=safe_int(default_row.get("NumeroBocchelli",0)), step=1, key="numero_bocchelli")
     diametri_a_monte = st.selectbox("DiametriAMonte", [">5","<5"], index=0 if default_row.get("DiametriAMonte",">5")==">5" else 1, key="diametri_a_monte")
     diametri_a_valle = st.selectbox("DiametriAValle", [">5 sbocco camino/>2 curva","<5 sbocco camino/<2 curva"], index=0 if default_row.get("DiametriAValle","") == ">5 sbocco camino/>2 curva" else 1, key="diametri_a_valle")
     analizzatore = st.selectbox("Analizzatore", ["Horiba","EL3000","MRU","FID","Altro"], index=["Horiba","EL3000","MRU","FID","Altro"].index(default_row.get("Analizzatore","Horiba")), key="analizzatore")
@@ -172,7 +185,7 @@ with st.expander("📂 Dati generali", expanded=True):
     micromanometro = st.text_input("Micromanometro", value=default_row.get("Micromanometro",""), key="micromanometro")
     termocoppia = st.text_input("Termocoppia", value=default_row.get("Termocoppia",""), key="termocoppia")
     darcy = st.text_input("Darcy", value=default_row.get("Darcy",""), key="darcy")
-    kdarcy = st.number_input("KDarcy", value=float(default_row.get("KDarcy",0)), step=0.01, key="kdarcy")
+    kdarcy = st.number_input("KDarcy", value=safe_float(default_row.get("KDarcy",0)), step=0.01, key="kdarcy")
 
 # ===============================
 # PRELIEVI AUTOMATICI
@@ -191,23 +204,23 @@ for i in range(1, int(num_prelievi)+1):
         # Input prelievo
         c1,c2,c3 = st.columns([2,2,2])
         with c1:
-            ugello = st.number_input(f"Ugello {i}", value=float(meta_defaults.get("Ugello",0)), key=f"ugello_{i}", step=0.1)
-            durata = st.number_input(f"Durata Prelievo {i} (s)", value=float(meta_defaults.get("DurataPrelievo",0)), key=f"durata_{i}", step=0.1)
+            ugello = st.number_input(f"Ugello {i}", value=safe_float(meta_defaults.get("Ugello",0)), key=f"ugello_{i}", step=0.1)
+            durata = st.number_input(f"Durata Prelievo {i} (s)", value=safe_float(meta_defaults.get("DurataPrelievo",0)), key=f"durata_{i}", step=0.1)
             ora_inizio = st.time_input(f"Ora Inizio {i}", value=datetime.strptime(meta_defaults.get("OraInizio","00:00"), "%H:%M").time() if meta_defaults.get("OraInizio") else datetime.now().time(), key=f"ora_{i}")
             filtro_qma = st.text_input(f"Filtro QMA {i}", value=meta_defaults.get("FiltroQMA",""), key=f"filtro_{i}")
             prelievo_multiplo = st.selectbox(f"Prelievo Multiplo {i}", ["NO","SI"], index=0 if meta_defaults.get("PrelievoMultiplo","NO")=="NO" else 1, key=f"multi_{i}")
         with c2:
-            temperatura = st.number_input(f"Temperatura °C {i}", value=float(meta_defaults.get("Temperatura",0)), key=f"temp_{i}", step=0.1)
-            pressione = st.number_input(f"Pressione hPa {i}", value=float(meta_defaults.get("Pressione",1013.25)), key=f"press_{i}", step=0.1)
-            umidita = st.number_input(f"Umidità % {i}", value=float(meta_defaults.get("Umidita",0)), key=f"umid_{i}", step=0.1)
+            temperatura = st.number_input(f"Temperatura °C {i}", value=safe_float(meta_defaults.get("Temperatura",0)), key=f"temp_{i}", step=0.1)
+            pressione = st.number_input(f"Pressione hPa {i}", value=safe_float(meta_defaults.get("Pressione",1013.25)), key=f"press_{i}", step=0.1)
+            umidita = st.number_input(f"Umidità % {i}", value=safe_float(meta_defaults.get("Umidita",0)), key=f"umid_{i}", step=0.1)
             meteo = st.selectbox(f"Meteo {i}", ["", "Sereno", "Nuvoloso", "Pioggia", "Vento"], index=["", "Sereno", "Nuvoloso", "Pioggia", "Vento"].index(meta_defaults.get("Meteo","")) if meta_defaults.get("Meteo") else 0, key=f"meteo_{i}")
         with c3:
-            peso_in_serp = st.number_input(f"Peso Iniziale Serpentina {i}", value=float(meta_defaults.get("PesoIniSerpentina",0)), key=f"pis_{i}", step=0.01)
-            peso_fin_serp = st.number_input(f"Peso Finale Serpentina {i}", value=float(meta_defaults.get("PesoFinSerpentina",0)), key=f"pfs_{i}", step=0.01)
-            peso_in_gel = st.number_input(f"Peso Iniziale Gel {i}", value=float(meta_defaults.get("PesoIniGel",0)), key=f"pig_{i}", step=0.01)
-            peso_fin_gel = st.number_input(f"Peso Finale Gel {i}", value=float(meta_defaults.get("PesoFinGel",0)), key=f"pfg_{i}", step=0.01)
+            peso_in_serp = st.number_input(f"Peso Iniziale Serpentina {i}", value=safe_float(meta_defaults.get("PesoIniSerpentina",0)), key=f"pis_{i}", step=0.01)
+            peso_fin_serp = st.number_input(f"Peso Finale Serpentina {i}", value=safe_float(meta_defaults.get("PesoFinSerpentina",0)), key=f"pfs_{i}", step=0.01)
+            peso_in_gel = st.number_input(f"Peso Iniziale Gel {i}", value=safe_float(meta_defaults.get("PesoIniGel",0)), key=f"pig_{i}", step=0.01)
+            peso_fin_gel = st.number_input(f"Peso Finale Gel {i}", value=safe_float(meta_defaults.get("PesoFinGel",0)), key=f"pfg_{i}", step=0.01)
 
-        num_param = st.number_input(f"Numero di parametri per prelievo {i}", min_value=1, max_value=20, value=int(meta_defaults.get("NumParam",1)), key=f"num_param_{i}")
+        num_param = st.number_input(f"Numero di parametri per prelievo {i}", min_value=1, max_value=20, value=safe_int(meta_defaults.get("NumParam",1)), key=f"num_param_{i}")
         params_for_prelievo = []
 
         for j in range(1, int(num_param)+1):
@@ -217,13 +230,13 @@ for i in range(1, int(num_prelievi)+1):
                 altro_parametro = st.text_input(f"Altro parametro {j} (prel {i})", key=f"altro_{i}_{j}") if parametro=="Altro" else ""
             with s2:
                 pompa = st.text_input(f"Pompa {j} (prel {i})", key=f"pompa_{i}_{j}")
-                portata = st.number_input(f"Portata {j} (prel {i})", key=f"portata_{i}_{j}", step=0.01)
+                portata = st.number_input(f"Portata {j} (prel {i})", value=safe_float(meta_defaults.get("Portata",0)), key=f"portata_{i}_{j}", step=0.01)
             with s3:
-                vol_in = st.number_input(f"Volume Iniziale {j} (prel {i})", value=float(meta_defaults.get("VolumeIniziale",0)), key=f"vol_in_{i}_{j}", step=0.1)
-                vol_fin = st.number_input(f"Volume Finale {j} (prel {i})", value=float(meta_defaults.get("VolumeFinale",0)), key=f"vol_fin_{i}_{j}", step=0.1)
+                vol_in = st.number_input(f"Volume Iniziale {j} (prel {i})", value=safe_float(meta_defaults.get("VolumeIniziale",0)), key=f"vol_in_{i}_{j}", step=0.1)
+                vol_fin = st.number_input(f"Volume Finale {j} (prel {i})", value=safe_float(meta_defaults.get("VolumeFinale",0)), key=f"vol_fin_{i}_{j}", step=0.1)
             with s4:
-                temp_in = st.number_input(f"T In {j} (prel {i})", value=float(meta_defaults.get("TemperaturaIniziale",0)), key=f"temp_in_{i}_{j}", step=0.1)
-                temp_fin = st.number_input(f"T Fin {j} (prel {i})", value=float(meta_defaults.get("TemperaturaFinale",0)), key=f"temp_fin_{i}_{j}", step=0.1)
+                temp_in = st.number_input(f"T In {j} (prel {i})", value=safe_float(meta_defaults.get("TemperaturaIniziale",0)), key=f"temp_in_{i}_{j}", step=0.1)
+                temp_fin = st.number_input(f"T Fin {j} (prel {i})", value=safe_float(meta_defaults.get("TemperaturaFinale",0)), key=f"temp_fin_{i}_{j}", step=0.1)
 
             # Calcoli automatici
             vn = calcola_volume_normalizzato(vol_in, vol_fin, temp_in, temp_fin, pressione)
