@@ -104,6 +104,27 @@ def calcola_umidita_fumi(pis, pfs, pig, pfg, volume_normalizzato):
         return 0.0, 0.0, 0.0
 
 # ===============================
+# SAFE FUNCTIONS
+# ===============================
+def safe_float(value):
+    try:
+        return float(value)
+    except:
+        return 0.0
+
+def safe_int(value):
+    try:
+        return int(value)
+    except:
+        return 0
+
+def safe_str(value):
+    try:
+        return str(value)
+    except:
+        return ""
+
+# ===============================
 # INIZIO APP
 # ===============================
 st.title("📋 Modulo Campionamenti Ambientali — versione automatica")
@@ -157,24 +178,6 @@ else:
 # ===============================
 # DATI GENERALI
 # ===============================
-def safe_float(value):
-    try:
-        return float(value)
-    except:
-        return 0.0
-
-def safe_int(value):
-    try:
-        return int(value)
-    except:
-        return 0
-
-def safe_str(value):
-    try:
-        return str(value)
-    except:
-        return ""
-
 with st.expander("📂 Dati generali", expanded=True):
     default_row = rows[0] if prefill_enabled and sheet_read and rows else {}
 
@@ -233,7 +236,7 @@ for i in range(1, int(num_prelievi)+1):
         params_for_prelievo = []
 
         for j in range(1, int(num_param)+1):
-            s1,s2,s3,s4 = st.columns([2,1,1,1])
+            s1,s2,s3,s4,s5 = st.columns([2,1,1,1,1])
             with s1:
                 parametro = st.selectbox(f"Parametro {j} (prel {i})", PARAMETRI, index=0, key=f"param_{i}_{j}")
                 altro_parametro = st.text_input(f"Altro parametro {j} (prel {i})", key=f"altro_{i}_{j}") if parametro=="Altro" else ""
@@ -246,81 +249,32 @@ for i in range(1, int(num_prelievi)+1):
             with s4:
                 temp_in = st.number_input(f"T In {j} (prel {i})", value=safe_float(meta_defaults.get("TemperaturaIniziale",0)), key=f"temp_in_{i}_{j}", step=0.1)
                 temp_fin = st.number_input(f"T Fin {j} (prel {i})", value=safe_float(meta_defaults.get("TemperaturaFinale",0)), key=f"temp_fin_{i}_{j}", step=0.1)
+            with s5:
+                # ✅ NUOVI CAMPI
+                isocinetismo = st.number_input(f"Isocinetismo {j} (prel {i})", value=safe_float(meta_defaults.get("Isocinetismo",0)), key=f"isoc_{i}_{j}", step=0.01)
+                vel_camp = st.number_input(f"Velocità Campionamento {j} (prel {i})", value=safe_float(meta_defaults.get("VelocitàCampionamento",0)), key=f"velcamp_{i}_{j}", step=0.01)
+                dp = st.number_input(f"dP {j} (prel {i})", value=safe_float(meta_defaults.get("dP",0)), key=f"dp_{i}_{j}", step=0.01)
+                temp_fumi = st.number_input(f"Temperatura Fumi {j} (prel {i})", value=safe_float(meta_defaults.get("TemperaturaFumi",0)), key=f"tempfumi_{i}_{j}", step=0.1)
+                note = st.text_input(f"Note {j} (prel {i})", value=safe_str(meta_defaults.get("Note","")), key=f"note_{i}_{j}")
 
             # Calcoli automatici
-            vn = calcola_volume_normalizzato(vol_in, vol_fin, temp_in, temp_fin, pressione)
-            umid, vol_acq, vol_tot = calcola_umidita_fumi(peso_in_serp, peso_fin_serp, peso_in_gel, peso_fin_gel, vn)
+            vol_norm = calcola_volume_normalizzato(vol_in, vol_fin, temp_in, temp_fin, pressione)
+            umid_fumi, _, _ = calcola_umidita_fumi(peso_in_serp, peso_fin_serp, peso_in_gel, peso_fin_gel, vol_norm)
 
-            st.markdown(f"**VN (param {j} prel {i}):** {vn:.6f}")
-            st.markdown(f"**Umidità fumi (prel {i}):** {umid:.6f} %")
+            params_for_prelievo.append([
+                SessionID,ditta,stabilimento,str(data_campagna),camino,operatore1,operatore2,
+                pressione_statica,velocita_camino,angolo_swirl,diametro_progetto,diametro_misurato,
+                numero_bocchelli,diametri_a_monte,diametri_a_valle,"",
+                analizzatore,cert_mix,cert_o2,pc,laser,micromanometro,termocoppia,darcy,kdarcy,
+                i,ugello,durata,ora_inizio.strftime("%H:%M"),filtro_qma,prelievo_multiplo,
+                temperatura,pressione,umidita,meteo,
+                parametro,altro_parametro,pompa,portata,
+                vol_in,vol_fin,temp_in,temp_fin,vol_norm,
+                peso_in_serp,peso_fin_serp,peso_in_gel,peso_fin_gel,umid_fumi,
+                isocinetismo,vel_camp,dp,temp_fumi,note,"","",datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ])
 
-            params_for_prelievo.append({
-                "Parametro": parametro if parametro!="Altro" else altro_parametro,
-                "AltroParametro": altro_parametro,
-                "Pompa": pompa,
-                "Portata": portata,
-                "VolumeIniziale": vol_in,
-                "VolumeFinale": vol_fin,
-                "TemperaturaIniziale": temp_in,
-                "TemperaturaFinale": temp_fin,
-                "VolumeNormalizzato": vn,
-                "UmiditaFumi": umid
-            })
-
-        # Righe finali per Google Sheet
-        for j_idx, p in enumerate(params_for_prelievo, start=1):
-            row = {
-                "SessionID": SessionID,
-                "Ditta": ditta,
-                "Stabilimento": stabilimento,
-                "Data": data_campagna.isoformat(),
-                "Camino": camino,
-                "Operatore1": operatore1,
-                "Operatore2": operatore2,
-                "PressioneStatica": pressione_statica,
-                "VelocitàCamino": velocita_camino,
-                "AngoloDiSwirl": angolo_swirl,
-                "DiametroProgetto": diametro_progetto,
-                "DiametroMisurato": diametro_misurato,
-                "NumeroBocchelli": numero_bocchelli,
-                "DiametriAMonte": diametri_a_monte,
-                "DiametriAValle": diametri_a_valle,
-                "Analizzatore": analizzatore,
-                "CertMix": cert_mix,
-                "CertO2": cert_o2,
-                "PC": pc,
-                "Laser": laser,
-                "Micromanometro": micromanometro,
-                "Termocoppia": termocoppia,
-                "Darcy": darcy,
-                "KDarcy": kdarcy,
-                "PrelievoN": i,
-                "Ugello": ugello,
-                "DurataPrelievo": durata,
-                "OraInizio": ora_inizio.strftime("%H:%M"),
-                "FiltroQMA": filtro_qma,
-                "PrelievoMultiplo": prelievo_multiplo,
-                "Temperatura": temperatura,
-                "Pressione": pressione,
-                "Umidita": umidita,
-                "Meteo": meteo,
-                "PesoIniSerpentina": peso_in_serp,
-                "PesoFinSerpentina": peso_fin_serp,
-                "PesoIniGel": peso_in_gel,
-                "PesoFinGel": peso_fin_gel,
-                "Parametro": p["Parametro"],
-                "AltroParametro": p["AltroParametro"],
-                "Pompa": p["Pompa"],
-                "Portata": p["Portata"],
-                "VolumeIniziale": p["VolumeIniziale"],
-                "VolumeFinale": p["VolumeFinale"],
-                "TemperaturaIniziale": p["TemperaturaIniziale"],
-                "TemperaturaFinale": p["TemperaturaFinale"],
-                "VolumeNormalizzato": p["VolumeNormalizzato"],
-                "UmiditaFumi": p["UmiditaFumi"],
-                "Ultima_Modifica": datetime.now().isoformat()
-            }
-            nuovi_prelievi.append(row)
+        nuovi_prelievi.extend(params_for_prelievo)
 
 # ===============================
 # SALVATAGGIO SU GOOGLE SHEETS
@@ -328,5 +282,5 @@ for i in range(1, int(num_prelievi)+1):
 if st.button("💾 Salva su Google Sheets"):
     if sheet_read:
         delete_rows_for_session(sheet_read, SessionID)
-        append_rows(sheet_read, [[row.get(h,"") for h in HEADER] for row in nuovi_prelievi])
-        st.success(f"✅ Salvataggio completato! {len(nuovi_prelievi)} righe aggiunte")
+        append_rows(sheet_read, nuovi_prelievi)
+        st.success(f"Tutti i prelievi per la sessione {SessionID} sono stati salvati!")
