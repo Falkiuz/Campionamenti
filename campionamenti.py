@@ -169,8 +169,17 @@ def safe_int(value):
     except:
         return 0
 
+def safe_str(value):
+    try:
+        return str(value)
+    except:
+        return ""
+
 with st.expander("📂 Dati generali", expanded=True):
     default_row = rows[0] if prefill_enabled and sheet_read and rows else {}
+
+    pressione_statica = st.number_input("PressioneStatica", value=safe_float(default_row.get("PressioneStatica",0)), step=0.1, key="pressione_statica")
+    velocita_camino = st.number_input("VelocitàCamino", value=safe_float(default_row.get("VelocitàCamino",0)), step=0.1, key="velocita_camino")
     angolo_swirl = st.number_input("AngoloDiSwirl", value=safe_float(default_row.get("AngoloDiSwirl",0)), step=0.1, key="angolo_swirl")
     diametro_progetto = st.number_input("DiametroProgetto", value=safe_float(default_row.get("DiametroProgetto",0)), step=0.1, key="diametro_progetto")
     diametro_misurato = st.number_input("DiametroMisurato", value=safe_float(default_row.get("DiametroMisurato",0)), step=0.1, key="diametro_misurato")
@@ -178,13 +187,13 @@ with st.expander("📂 Dati generali", expanded=True):
     diametri_a_monte = st.selectbox("DiametriAMonte", [">5","<5"], index=0 if default_row.get("DiametriAMonte",">5")==">5" else 1, key="diametri_a_monte")
     diametri_a_valle = st.selectbox("DiametriAValle", [">5 sbocco camino/>2 curva","<5 sbocco camino/<2 curva"], index=0 if default_row.get("DiametriAValle","") == ">5 sbocco camino/>2 curva" else 1, key="diametri_a_valle")
     analizzatore = st.selectbox("Analizzatore", ["Horiba","EL3000","MRU","FID","Altro"], index=["Horiba","EL3000","MRU","FID","Altro"].index(default_row.get("Analizzatore","Horiba")), key="analizzatore")
-    cert_mix = st.text_input("CertMix", value=default_row.get("CertMix",""), key="cert_mix")
-    cert_o2 = st.text_input("CertO2", value=default_row.get("CertO2",""), key="cert_o2")
-    pc = st.text_input("PC", value=default_row.get("PC",""), key="pc")
-    laser = st.text_input("Laser", value=default_row.get("Laser",""), key="laser")
-    micromanometro = st.text_input("Micromanometro", value=default_row.get("Micromanometro",""), key="micromanometro")
-    termocoppia = st.text_input("Termocoppia", value=default_row.get("Termocoppia",""), key="termocoppia")
-    darcy = st.text_input("Darcy", value=default_row.get("Darcy",""), key="darcy")
+    cert_mix = st.text_input("CertMix", value=safe_str(default_row.get("CertMix","")), key="cert_mix")
+    cert_o2 = st.text_input("CertO2", value=safe_str(default_row.get("CertO2","")), key="cert_o2")
+    pc = st.text_input("PC", value=safe_str(default_row.get("PC","")), key="pc")
+    laser = st.text_input("Laser", value=safe_str(default_row.get("Laser","")), key="laser")
+    micromanometro = st.text_input("Micromanometro", value=safe_str(default_row.get("Micromanometro","")), key="micromanometro")
+    termocoppia = st.text_input("Termocoppia", value=safe_str(default_row.get("Termocoppia","")), key="termocoppia")
+    darcy = st.text_input("Darcy", value=safe_str(default_row.get("Darcy","")), key="darcy")
     kdarcy = st.number_input("KDarcy", value=safe_float(default_row.get("KDarcy",0)), step=0.01, key="kdarcy")
 
 # ===============================
@@ -207,7 +216,7 @@ for i in range(1, int(num_prelievi)+1):
             ugello = st.number_input(f"Ugello {i}", value=safe_float(meta_defaults.get("Ugello",0)), key=f"ugello_{i}", step=0.1)
             durata = st.number_input(f"Durata Prelievo {i} (s)", value=safe_float(meta_defaults.get("DurataPrelievo",0)), key=f"durata_{i}", step=0.1)
             ora_inizio = st.time_input(f"Ora Inizio {i}", value=datetime.strptime(meta_defaults.get("OraInizio","00:00"), "%H:%M").time() if meta_defaults.get("OraInizio") else datetime.now().time(), key=f"ora_{i}")
-            filtro_qma = st.text_input(f"Filtro QMA {i}", value=meta_defaults.get("FiltroQMA",""), key=f"filtro_{i}")
+            filtro_qma = st.text_input(f"Filtro QMA {i}", value=safe_str(meta_defaults.get("FiltroQMA","")), key=f"filtro_{i}")
             prelievo_multiplo = st.selectbox(f"Prelievo Multiplo {i}", ["NO","SI"], index=0 if meta_defaults.get("PrelievoMultiplo","NO")=="NO" else 1, key=f"multi_{i}")
         with c2:
             temperatura = st.number_input(f"Temperatura °C {i}", value=safe_float(meta_defaults.get("Temperatura",0)), key=f"temp_{i}", step=0.1)
@@ -268,6 +277,23 @@ for i in range(1, int(num_prelievi)+1):
                 "Camino": camino,
                 "Operatore1": operatore1,
                 "Operatore2": operatore2,
+                "PressioneStatica": pressione_statica,
+                "VelocitàCamino": velocita_camino,
+                "AngoloDiSwirl": angolo_swirl,
+                "DiametroProgetto": diametro_progetto,
+                "DiametroMisurato": diametro_misurato,
+                "NumeroBocchelli": numero_bocchelli,
+                "DiametriAMonte": diametri_a_monte,
+                "DiametriAValle": diametri_a_valle,
+                "Analizzatore": analizzatore,
+                "CertMix": cert_mix,
+                "CertO2": cert_o2,
+                "PC": pc,
+                "Laser": laser,
+                "Micromanometro": micromanometro,
+                "Termocoppia": termocoppia,
+                "Darcy": darcy,
+                "KDarcy": kdarcy,
                 "PrelievoN": i,
                 "Ugello": ugello,
                 "DurataPrelievo": durata,
